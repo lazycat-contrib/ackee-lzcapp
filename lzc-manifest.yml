@@ -1,0 +1,65 @@
+application:
+  subdomain: ackee
+  multi_instance: false
+  upstreams:
+    - location: /package-licenses/
+      backend: file:///lzcapp/pkg/content/licenses/
+    - location: /
+      backend: http://ackee:3000/
+
+services:
+  mongo:
+    image: docker.1ms.run/library/mongo:7
+    # Not exposed through any upstream and no port is published: this database
+    # is reachable only on the app's internal container network. No credentials
+    # are put in the connection URI because a generated password can contain
+    # characters that would break URI syntax, and YAML templates cannot
+    # percent-encode. The UI itself is gated by ACKEE_USERNAME/PASSWORD.
+    command:
+      - --bind_ip
+      - 127.0.0.1,mongo
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mongosh --quiet --eval "db.adminCommand('ping')" || exit 1
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 30s
+    binds:
+      - /lzcapp/var/mongo:/data/db
+
+  ackee:
+    # upstream: electerious/ackee:3.7.1
+    image: docker.1ms.run/electerious/ackee:3.7.1
+    depends_on:
+      - mongo
+    environment:
+      - ACKEE_MONGODB=mongodb://mongo:27017/ackee
+      - |-
+        ACKEE_USERNAME={{ .U.admin_username }}
+      - |-
+        ACKEE_PASSWORD={{ .U.admin_password }}
+      - ACKEE_PORT=3000
+      - ACKEE_AUTO_ORIGIN=true
+      - TZ=Asia/Shanghai
+
+usage: |
+  Ackee 是自托管的网站统计工具：不用 cookie、不依赖第三方，看访客量、来源和页面排行。
+
+  使用方法：
+  1. 打开应用，用你安装时设置的用户名和密码登录。
+  2. 在设置里新建一个域名，会给你一段跟踪脚本。
+  3. 把这段脚本贴到网站页面里（通常是 </body> 前），之后访问就会被记录。
+  4. 回到 Ackee 看实时访客、访问趋势、来源和热门页面。
+
+  数据与安全：
+  - 统计数据保存在 MongoDB（/lzcapp/var/mongo），卸载应用会一并删除，请定期备份。
+  - 登录用户名和密码来自安装参数，密码默认随机生成，不存在内置弱口令。
+  - 内置数据库只在应用的容器内网可达，没有对外端口，也没有经入口暴露。
+  - 应用经懒猫入口鉴权访问。
+
+  说明：
+  - 两个容器：Ackee + MongoDB 7，启动顺序由依赖关系保证。
+  - 已开启 ACKEE_AUTO_ORIGIN，跟踪脚本会自动使用当前访问的域名，不必手工填写。
+  - 未做真机验证：登录、建域名、嵌入脚本、记录访问以及重启后持久化均未在设备上实测。
