@@ -1,6 +1,10 @@
 application:
   subdomain: ackee
   multi_instance: false
+  # This app authenticates its own users, so it is exposed directly
+  # instead of sitting behind the platform login gate.
+  public_path:
+    - /
   upstreams:
     - location: /package-licenses/
       backend: file:///lzcapp/pkg/content/licenses/
@@ -57,7 +61,8 @@ usage: |
   - 统计数据保存在 MongoDB（/lzcapp/var/mongo），卸载应用会一并删除，请定期备份。
   - 登录用户名和密码来自安装参数，密码默认随机生成，不存在内置弱口令。
   - 内置数据库只在应用的容器内网可达，没有对外端口，也没有经入口暴露。
-  - 应用经懒猫入口鉴权访问。
+  - 应用直接对外开放，由应用自己的登录页鉴权：
+    自带账号体系的服务再套一层平台鉴权会造成重复登录，所以用 public_path。
 
   说明：
   - 两个容器：Ackee + MongoDB 7，启动顺序由依赖关系保证。
